@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import skimage
 from skimage.morphology import closing, opening, square
-
+from skimage.measure import label
 
 #w zadaniu będzie rozszerzenie png i liczby o 0...N-1
 def read_images(num_of_images, path):
@@ -29,12 +29,45 @@ for image in images:
     
     imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     ret, thresh = cv2.threshold(imgray, 127, 255, 0)
-    thresh = closing(thresh, square(8))
-    #thresh = opening(thresh, square(50))
+    
+    
+    thresh = closing(thresh, square(10))
+    plt.figure()
+    plt.title("Threshold after closing")
+    plt.imshow(thresh)
+#    thresh = opening(thresh, square(2))
+#    plt.figure()
+#    plt.title("Threshold after opening")
+#    plt.imshow(thresh)
+    
+    #gaussian filter + otsu threshohlind?
+#    blur = cv2.GaussianBlur(thresh, (9,9),0)
+#    plt.figure()
+#    plt.title("Gaussian Blur")
+#    plt.imshow(blur)
+#    
+#    _,thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+#    blur = cv2.GaussianBlur(thresh, (9,9),0)
+#    plt.figure()
+#    plt.title("Otsu thresh")
+#    plt.imshow(thresh)
+    
+    
+    #jakies tricki z lab3 piro:
+#    lab_fig = label(original_image)
+#    plt.figure()
+#    plt.title('lab_fig')
+#    plt.imshow(lab_fig)
+    
+    
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
   
     
     cv2.drawContours(original_image, contours, -1, (0,255,0), 10)
+    
+    plt.figure()
+    plt.title("contours only")
+    plt.imshow(original_image)
     
 #    if licznik ==3:
 #        plt.figure()
@@ -58,8 +91,8 @@ for image in images:
             #cv2.putText(image, str(i), (x, y), font, 0.3, (255, 0, 0))
             #i+=1
          
-        if len(approx)==4:
-            break
+#        if len(approx)==4:
+#            break
     
     
     plt.figure()
