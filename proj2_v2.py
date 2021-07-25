@@ -94,7 +94,7 @@ def getWarp(biggest, img):
         
         #REMOVE 20 PIXELS FORM EACH SIDE
         imgWarpColored=imgWarpColored[20:imgWarpColored.shape[0] - 20, 20:imgWarpColored.shape[1] - 20]
-        imgWarpColored = cv2.resize(imgWarpColored,(widthImg,heightImg))
+        imgWarpColored = cv2.resize(imgWarpColored,(heightImg,widthImg))
         
     return imgWarpColored
 
@@ -123,7 +123,7 @@ def getContours(img, imgContour):
     return biggest
 
 #load images
-images = read_images(3, '.\examples')
+images = read_images(30, '.\examples')
 
 #process images:
 #licznik pomocniczy
@@ -162,15 +162,14 @@ for image in images:
     imgWarp = getWarp(biggest, image)
     
  
-    imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
+    #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
     
     plt.figure()
     plt.title("Image number "+str(licznik))
     #cv2.imshow("Image number "+str(licznik), imgWarp)
-    plt.imshow(imgStack[0])
+    plt.imshow(imgWarp)
     licznik+=1
-    print(imgWarp.shape[0])
-    print(imgWarp.shape[1])
+
 
 
 
