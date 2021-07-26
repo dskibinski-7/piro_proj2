@@ -81,11 +81,16 @@ def biggestContour(contours):
                 max_area = area
     return biggest,max_area
 
+    
 
-def getWarp(biggest, img):
+def getWarp(biggest, maxArea, img):
     widthImg, heightImg, _ = img.shape
     
-    if biggest.size != 0:
+    imgWarpColored = img.copy()
+    
+    if len(biggest)!=4 or maxArea < 2055550:
+        imgWarpColored=imgWarpColored[80:imgWarpColored.shape[0] - 300, 80:imgWarpColored.shape[1] - 80]      
+    else:
         biggest=reorder(biggest)
         pts1 = np.float32(biggest) # PREPARE POINTS FOR WARP
         pts2 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) # PREPARE POINTS FOR WARP
@@ -97,6 +102,45 @@ def getWarp(biggest, img):
         imgWarpColored = cv2.resize(imgWarpColored,(heightImg,widthImg))
         
     return imgWarpColored
+
+def DeleteGrid(img):
+    
+    
+    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    imgGray = cv2.bitwise_not(imgGray)
+    imgThresh = cv2.adaptiveThreshold(imgGray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, \
+                                cv2.THRESH_BINARY, 15, -2) 
+    
+
+    horizontal = np.copy(imgThresh)
+    vertical = np.copy(imgThresh)
+    
+    cols = horizontal.shape[1]
+    horizontal_size = cols // 35  #?????    
+    horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_size, 1))    
+    horizontal = cv2.erode(horizontal, horizontalStructure)
+    horizontal = cv2.dilate(horizontal, horizontalStructure)
+    
+    rows = vertical.shape[0]
+    vertical_size = cols // 35  #?????    
+    verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_size))    
+    vertical = cv2.erode(vertical, verticalStructure)
+    vertical = cv2.dilate(vertical, verticalStructure)
+    
+    #kernel = np.ones((40,3),np.uint8)
+    #dilation = cv2.dilate(img,kernel,iterations=1)
+    #opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+    #closing = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel)
+    
+    imgPlain = imgThresh.copy()
+    
+    for i in range(imgThresh.shape[0]):
+        for j in range(imgThresh.shape[1]):
+            if vertical[i][j]==255 or horizontal[i][j]==255:
+                imgPlain[i][j]=0
+    
+    return imgGray, imgThresh, horizontal, vertical, imgPlain
+
 
 def getContours(img, imgContour):
     
@@ -113,6 +157,9 @@ def getContours(img, imgContour):
         #sprawdzac pole powstalego prostokata?
 
     biggest, maxArea = biggestContour(contours)
+#    print(maxArea)
+#    print(biggest)
+#    print('-'*20)
     
     for big in biggest:
         x=big[0][0]
@@ -120,10 +167,10 @@ def getContours(img, imgContour):
     
         imgContour = cv2.circle(imgContour, (x,y), radius=20, color=(255, 0, 0), thickness=-1)
        
-    return biggest
+    return biggest, maxArea
 
 #load images
-images = read_images(30, '.\examples')
+images = read_images(4, '.\examples')
 
 #process images:
 #licznik pomocniczy
@@ -132,8 +179,8 @@ for image in images:
 
     imgContour = image.copy()
     
+    #preliminary image processing
     imgHSV = cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
-    ###
     h_min = 0
     h_max = 100
     s_min = 0
@@ -145,29 +192,32 @@ for image in images:
     upper = np.array([h_max,s_max,v_max])
     mask = cv2.inRange(imgHSV,lower,upper)
     result = cv2.bitwise_and(image,image, mask = mask)   
-    ###
     
     imgBlur = cv2.GaussianBlur(result, (7,7), 1)
     imgGray = cv2.cvtColor(imgBlur, cv2.COLOR_BGR2GRAY)
     _, imgThresh = cv2.threshold(imgGray, 127, 255, 0)
     
+    
     #ktory z tego ostatecznie do get contours?
     #imgClosing = closing(imgThresh, square(5))
-    imgDial = cv2.dilate(imgThresh, square(15), iterations=2)
+    imgDial = cv2.dilate(imgThresh, square(10), iterations=2)
     #imgEro = cv2.erode(imgDial, square(5), iterations=1) 
     
-    biggest = getContours(imgDial, imgContour)
+    biggest, maxArea = getContours(imgDial, imgContour) 
+    imgWarp = getWarp(biggest, maxArea, image)
+    
+    imgGray, imgThresh, horizontal, vertical, imgPlain = DeleteGrid(imgWarp)
     
     
-    imgWarp = getWarp(biggest, image)
     
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
+    imgStack = stackImages(1, ([imgWarp, imgGray, imgThresh, horizontal, vertical, imgPlain]))
     
     plt.figure()
     plt.title("Image number "+str(licznik))
     #cv2.imshow("Image number "+str(licznik), imgWarp)
-    plt.imshow(imgWarp)
+    plt.imshow(imgStack)
     licznik+=1
 
 
