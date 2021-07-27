@@ -10,6 +10,62 @@ from skimage.measure import label
 import numpy as np
 
 
+
+
+####################from stackover
+BLOCK_SIZE = 50
+THRESHOLD = 25
+
+
+def preprocess(image):
+    image = cv2.medianBlur(image, 3)
+    image = cv2.GaussianBlur(image, (3, 3), 0)
+    return 255 - image
+
+
+def postprocess(image):
+    image = cv2.medianBlur(image, 5)
+    # image = cv2.medianBlur(image, 5)
+#    kernel = np.ones((3,3), np.uint8)
+#    image = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
+    return image
+
+
+def get_block_index(image_shape, yx, block_size): 
+    y = np.arange(max(0, yx[0]-block_size), min(image_shape[0], yx[0]+block_size))
+    x = np.arange(max(0, yx[1]-block_size), min(image_shape[1], yx[1]+block_size))
+    return np.meshgrid(y, x)
+
+
+def adaptive_median_threshold(img_in):
+    med = np.median(img_in)
+    img_out = np.zeros_like(img_in)
+    img_out[img_in - med < THRESHOLD] = 255
+    return img_out
+
+
+def block_image_process(image, block_size):
+    out_image = np.zeros_like(image)
+    for row in range(0, image.shape[0], block_size):
+        for col in range(0, image.shape[1], block_size):
+            idx = (row, col)
+            block_idx = get_block_index(image.shape, idx, block_size)
+            out_image[block_idx] = adaptive_median_threshold(image[block_idx])
+
+    return out_image
+#######################################################
+
+
+
+
+
+
+
+
+
+
+
+
 #w zadaniu będzie rozszerzenie png i liczby o 0...N-1
 def read_images(num_of_images, path):
     images = []
@@ -105,25 +161,27 @@ def getWarp(biggest, maxArea, img):
 
 def DeleteGrid(img):
     
-    
-    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    imgGray = cv2.bitwise_not(imgGray)
-    imgThresh = cv2.adaptiveThreshold(imgGray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, \
-                                cv2.THRESH_BINARY, 15, -2) 
+    #jezeli przekazany obraz z funkcji stackoverowerowej, to ponizssze operacje niepotrzebne (wejscie to obraz binarny)
+#    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    imgThresh = cv2.bitwise_not(img)
+#    imgThresh = cv2.adaptiveThreshold(imgGray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, \
+#                                cv2.THRESH_BINARY, 31, -4) 
     
 
     horizontal = np.copy(imgThresh)
     vertical = np.copy(imgThresh)
     
     cols = horizontal.shape[1]
-    horizontal_size = cols // 35  #?????    
-    horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_size, 1))    
+    horizontal_size = cols // 30  #????
+    #horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_size, 1))
+    horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 1))    
     horizontal = cv2.erode(horizontal, horizontalStructure)
     horizontal = cv2.dilate(horizontal, horizontalStructure)
     
     rows = vertical.shape[0]
-    vertical_size = cols // 35  #?????    
-    verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_size))    
+    vertical_size = cols // 30  #?????    
+    #verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_size))
+    verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 45)) 
     vertical = cv2.erode(vertical, verticalStructure)
     vertical = cv2.dilate(vertical, verticalStructure)
     
@@ -138,8 +196,23 @@ def DeleteGrid(img):
         for j in range(imgThresh.shape[1]):
             if vertical[i][j]==255 or horizontal[i][j]==255:
                 imgPlain[i][j]=0
+                
+    #find lines again
+#    horizontal2 = np.copy(imgPlain)
+#    cols2 = horizontal2.shape[1]
+#    #horizontal_size2 = cols2 // 35  #?????    
+#    horizontalStructure2 = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))    
+#    horizontal2 = cv2.erode(horizontal2, horizontalStructure2)
+#    horizontal2 = cv2.dilate(horizontal2, horizontalStructure2)
     
-    return imgGray, imgThresh, horizontal, vertical, imgPlain
+    #'oczyszczenie' z drobinek
+    #imgClosing = closing(imgThresh, square(5))
+    #imgDial = cv2.dilate(imgPlain, np.ones(10,1), iterations=2)
+    #imgEro = cv2.erode(imgDial, square(5), iterations=1) 
+
+    
+    
+    return horizontal, vertical,  cv2.bitwise_not(imgPlain)
 
 
 def getContours(img, imgContour):
@@ -170,7 +243,7 @@ def getContours(img, imgContour):
     return biggest, maxArea
 
 #load images
-images = read_images(4, '.\examples')
+images = read_images(2, '.\examples')
 
 #process images:
 #licznik pomocniczy
@@ -206,18 +279,36 @@ for image in images:
     biggest, maxArea = getContours(imgDial, imgContour) 
     imgWarp = getWarp(biggest, maxArea, image)
     
-    imgGray, imgThresh, horizontal, vertical, imgPlain = DeleteGrid(imgWarp)
+    #imgGray, imgThresh, horizontal, vertical, imgPlain = DeleteGrid(imgWarp)
     
     
+    #############
+    image_in1 = cv2.cvtColor(imgWarp, cv2.COLOR_BGR2GRAY)
+#    plt.figure()
+#    plt.imshow(image_in)
+    image_in2 = preprocess(image_in1)
+#    plt.figure()
+#    plt.imshow(image_in)
+    image_out1 = block_image_process(image_in2, BLOCK_SIZE)
+#    plt.figure()
+#    plt.imshow(image_out)
+    imgGridless = postprocess(image_out1)
+#    plt.figure()
+#    plt.imshow(image_out)
+    ############
     
+    #moze dac jeszce raz delete grid na imgout2
+    
+    #horizontal, vertical, imgPlain = DeleteGrid(image_out2)
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
-    imgStack = stackImages(1, ([imgWarp, imgGray, imgThresh, horizontal, vertical, imgPlain]))
+    imgStack = stackImages(1, ([imgWarp, imgGridless]))
     
     plt.figure()
     plt.title("Image number "+str(licznik))
-    #cv2.imshow("Image number "+str(licznik), imgWarp)
     plt.imshow(imgStack)
+#    plt.figure()
+#    plt.imshow(255-image_out2)
     licznik+=1
 
 
