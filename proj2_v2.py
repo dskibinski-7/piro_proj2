@@ -28,6 +28,14 @@ def postprocess(image):
     # image = cv2.medianBlur(image, 5)
 #    kernel = np.ones((3,3), np.uint8)
 #    image = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
+    #image = 255-image
+    #kernel = np.ones((3,3), np.uint8)
+    #image = opening(image, kernel)
+    #image = cv2.GaussianBlur(image,(13,13),0)
+    #image = cv2.threshold(image, 100, 255, cv2.THRESH_BINARY)[1]
+    #find contours and delete small area?
+
+  
     return image
 
 
@@ -57,9 +65,53 @@ def block_image_process(image, block_size):
 
 
 
+def DetectWords(imgGridless, imgWarp):
+    
+    #detected contours
+#    contours, _ = cv2.findContours(imgGridless, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+#    for cnt in contours:
+#        area = cv2.contourArea(cnt)
+#        if area > 150:
+#            cv2.drawContours(imgWarp, cnt, -1, (255,0,0), 5)
+#            
+#    return imgWarp
+    thresh = cv2.threshold(imgGridless, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    
+    # use morphology erode to blur horizontally
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 3))
+    morph = cv2.morphologyEx(thresh, cv2.MORPH_DILATE, kernel)
+    
+    # use morphology open to remove thin lines from dotted lines
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 20))
+    morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel)
 
+    contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = contours[0] if len(contours) == 2 else contours[1]
+    
+    
 
-
+    for cnt in contours[:-1]:
+        #area = cv2.contourArea(cnt)
+        if cv2.contourArea(cnt) > 2000 and len(cnt)>8:
+            #cv2.drawContours(imgWarp, cnt, -1, (255,0,0),5)
+            #find xmin and xmax in cnt
+            xmin = float('inf')
+            xmax = -1
+            for cnt_ix in range(len(cnt)):
+                x = cnt[cnt_ix][0][0]
+                if x < xmin:
+                    xmin = x
+                    y_for_xmin = cnt[cnt_ix][0][1]
+                if x > xmax:
+                    xmax = x
+                    y_for_xmax = cnt[cnt_ix][0][1]
+                    
+            #draw line
+            cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,0,255), 5)
+        
+        
+    
+    return morph, imgWarp
 
 
 
@@ -243,7 +295,7 @@ def getContours(img, imgContour):
     return biggest, maxArea
 
 #load images
-images = read_images(2, '.\examples')
+images = read_images(10, '.\examples')
 
 #process images:
 #licznik pomocniczy
@@ -297,16 +349,21 @@ for image in images:
 #    plt.imshow(image_out)
     ############
     
+    imgLines, test = DetectWords(imgGridless, imgWarp.copy())
+    
     #moze dac jeszce raz delete grid na imgout2
     
     #horizontal, vertical, imgPlain = DeleteGrid(image_out2)
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
-    imgStack = stackImages(1, ([imgWarp, imgGridless]))
+    imgStack = stackImages(1, ([imgWarp, imgGridless, imgLines, test]))
     
+#    plt.figure()
+#    plt.title("Image number "+str(licznik))
+#    plt.imshow(imgStack)
     plt.figure()
-    plt.title("Image number "+str(licznik))
-    plt.imshow(imgStack)
+    plt.imshow(test)
+    
 #    plt.figure()
 #    plt.imshow(255-image_out2)
     licznik+=1
