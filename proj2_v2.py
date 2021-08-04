@@ -8,7 +8,9 @@ import skimage
 from skimage.morphology import closing, opening, square
 from skimage.measure import label
 import numpy as np
-
+import pickle
+from sklearn.externals import joblib
+import collections
 
 
 
@@ -63,18 +65,22 @@ def block_image_process(image, block_size):
     return out_image
 #######################################################
 
-
+def FindGlobalYmin(cnt_with_ymin):
+    ymin_global = float('inf')
+    for i in range(len(cnt_with_ymin)):
+        y = cnt_with_ymin[i][0]
+        if y < ymin_global:
+            ymin_global = y
+            ix_with_ymin = i
+            
+    return ymin_global, ix_with_ymin
 
 def DetectWords(imgGridless, imgWarp):
     
-    #detected contours
-#    contours, _ = cv2.findContours(imgGridless, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-#    for cnt in contours:
-#        area = cv2.contourArea(cnt)
-#        if area > 150:
-#            cv2.drawContours(imgWarp, cnt, -1, (255,0,0), 5)
-#            
-#    return imgWarp
+    
+    #imgWarp = cv2.cvtColor(imgWarp, cv2.COLOR_BGR2GRAY)
+
+
     thresh = cv2.threshold(imgGridless, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     
     # use morphology erode to blur horizontally
@@ -88,13 +94,60 @@ def DetectWords(imgGridless, imgWarp):
     contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = contours[0] if len(contours) == 2 else contours[1]
     
-    
-
+    #slownik z danym konturem oraz najwyzej polozonym punktem z danego konturu
+    cnt_with_ymin = {}
+    #klucz dla slownika
+    i=0
     for cnt in contours[:-1]:
+        
         #area = cv2.contourArea(cnt)
         if cv2.contourArea(cnt) > 2000 and len(cnt)>8:
+            
             #cv2.drawContours(imgWarp, cnt, -1, (255,0,0),5)
-            #find xmin and xmax in cnt
+            
+            #w kazdym konturze znalezc najwyzej polozyny y (czyli najmniejszy)
+            ymin = float('inf')
+            for cnt_ix in range(len(cnt)):
+                y = cnt[cnt_ix][0][1]
+                if y < ymin:
+                    ymin = y
+                    
+            cnt_with_ymin[i] = [ymin, cnt]
+            i+=1
+            
+    #while cnts_dict > 0?
+    licznik = 0
+    contours_with_numbers = []
+    while len(cnt_with_ymin) > 0:
+        licznik+=1
+        #znalezienie najwyzej polozonego konturu
+        ymin_global, ix_with_ymin = FindGlobalYmin(cnt_with_ymin)
+            
+        #znalezienie konturow 'w jednej linii' oraz nastepne usuniecie ich z konturow, ktore maja byc przeszukiwane
+        #w celu znalezienia kolejnego ymin (tj. kolejnego rzędu)
+        cnts_in_one_row = []
+        #wrzucenie najwyzszego konturu
+        cnts_in_one_row.append(cnt_with_ymin[ix_with_ymin][1])
+        #usuniecie ze slownika
+        del cnt_with_ymin[ix_with_ymin]
+        
+        dict_keys = list(cnt_with_ymin.keys())
+        
+        for i in dict_keys:
+            diff_between_contours = abs(ymin_global-cnt_with_ymin[i][0])
+            
+            #prawdopodobnie jedna linia
+            if diff_between_contours <=30:
+                #wrzucenie konturu
+                cnts_in_one_row.append(cnt_with_ymin[i][1])
+                #usunac z cnt_with_ymin, aby w dalszych iteracjach nie sprawdzac tego samego
+                del cnt_with_ymin[i]
+                
+        
+        #find xmin and xmax in cnt
+        xmax_in_row = 0
+        for cnt in cnts_in_one_row:
+            #cnt = cnt[1]
             xmin = float('inf')
             xmax = -1
             for cnt_ix in range(len(cnt)):
@@ -105,13 +158,31 @@ def DetectWords(imgGridless, imgWarp):
                 if x > xmax:
                     xmax = x
                     y_for_xmax = cnt[cnt_ix][0][1]
-                    
+              
+                if xmax > xmax_in_row:
+                    xmax_in_row = xmax
+                    contour_with_number = cnt
+            
+            
+            
             #draw line
-            cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,0,255), 5)
+            if licznik%2 ==0:
+                cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,0,255), 5)
+                #cv2.putText(imgWarp, str(licznik), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
+                
+            else:
+                cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,255,0), 5)
+                #cv2.putText(imgWarp, str(licznik), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
+            #cv2.putText(imgWarp, str(i), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
         
+        contours_with_numbers.append(contour_with_number)
+        
+            
+            #ymax i ymin miec, jezeli kolejny ma ?zbliozne? ow wartosci do poprzedniego, to jest w tej samej linii
+            #nastepnie dzieki ymax i ymin moge wyciac linijki (chociaz bardziej potrzebuje xmax zeby same numerki sobie wziac)
         
     
-    return morph, imgWarp
+    return imgWarp, contours_with_numbers
 
 
 
@@ -294,8 +365,168 @@ def getContours(img, imgContour):
        
     return biggest, maxArea
 
+
+
+def DetectNumbers(img, contours_with_numbers):
+    
+    #cv2.drawContours(img, contours_with_numbers, -1, (255,0,0),5)
+    #do wywalenia
+    ktory_wiersz = 0
+    for cnt in contours_with_numbers:
+        
+        #do wywalenia
+        ktory_wiersz+=1
+        
+        x,y,w,h = cv2.boundingRect(cnt)
+        #cv2.rectangle(img, (x, y), (x + w, y + h), (36,255,12), 5)
+        img_frame_with_numbers = img[y:y+h, x:x+w]
+        index_numbers = []
+        
+
+        
+        image_height = h
+        
+        #from detectwords function
+        thresh = cv2.threshold(img_frame_with_numbers, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+        
+        kernel = np.ones((2,2),np.uint8)
+        erosion = cv2.erode(thresh,kernel,iterations = 1)
+        
+ 
+        #usuwanie linii, ale niezastosowane, poniewaz ucina tez znaki
+        #SPRAWDZ TEŻ Z THRESHEM
+#        horizontal = np.copy(erosion)
+#        
+#        horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (25,1))
+#        horizontal = cv2.erode(horizontal, horizontalStructure)
+#        horizontal = cv2.dilate(horizontal, horizontalStructure)
+#        
+#        imgWithoutLines = erosion.copy()
+#        imgWithoutLines = cv2.subtract(erosion, horizontal)
+        
+        #zdylowac pojedyncze cyferki
+        contours, _ = cv2.findContours(erosion, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        #rgb_frame = cv2.cvtColor(erosion,cv2.COLOR_GRAY2RGB)
+        
+        #posortowanie konturow (cyfr) od lewej do prawej
+        cnt_x_dict = {}
+        for cnt in contours:
+            x, _, _, _  = cv2.boundingRect(cnt)
+            cnt_x_dict[x] = cnt
+        #sort dict by x
+        #lista zawierajaca krotki klucz-wartosc (x-kontur)
+        sorted_list_with_cnt_x = sorted(cnt_x_dict.items())
+        contours = []
+        for x_contour in sorted_list_with_cnt_x:
+            contours.append(x_contour[1])
+                    
+        #do wywalenia:
+        #if ktory_wiersz == 3:
+#        img_testowe_rgb = cv2.cvtColor(img_frame_with_numbers, cv2.COLOR_GRAY2RGB)
+#        cv2.drawContours(img_testowe_rgb,  contours, -1, (255,0,0),1)
+#        plt.figure()
+#        plt.imshow(img_testowe_rgb)
+        
+        #wykrycie cyfr; przed tym sprobowac wyodrebnic
+        for cnt in contours:
+            #area = cv2.contourArea(cnt)
+            x,y,w,h = cv2.boundingRect(cnt) 
+            if len(cnt)>30 and h>0.5*image_height and len(cnt)<300:
+                #cv2.drawContours(rgb_frame, cnt, -1, (0,245,200),2)
+                img_frame_with_number = img_frame_with_numbers[y:y+h, x:x+w]
+                number = cv2.bitwise_not(img_frame_with_number)
+                
+                #do wywalenia
+                if ktory_wiersz == 3:
+                    img_testowe_rgb = cv2.cvtColor(img_frame_with_numbers, cv2.COLOR_GRAY2RGB)
+                    cv2.drawContours(img_testowe_rgb,  cnt, -1, (255,0,0),1)
+                    #cv2.putText(img_testowe_rgb, str(len(cnt)), (x+w//2,y+h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), thickness = 1)              
+                    plt.figure()
+                    plt.imshow(img_testowe_rgb)
+                
+
+                #set equal ratio before resizing
+                num_width = number.shape[1]
+                num_height = number.shape[0]
+                #make them even
+                if num_height %2 == 1:
+                    #add one row
+                    number = np.r_[number, np.zeros((1,num_width))]
+                    num_height+=1
+                if num_width %2 == 1:
+                    #add one column
+                    number = np.c_[number, np.zeros((num_height,1))]
+                    num_width+=1
+                    
+                if num_height > num_width:
+                    diff = num_height - num_width
+                    #width of the part to add
+                    add_to_one_side = int(diff/2)
+                    column_to_add = np.zeros((num_height,add_to_one_side))
+                    
+                    number = np.c_[column_to_add, number, column_to_add]
+                #to w ogole moze byc nieprawidlowe? i trzeba inaczej to rozpykac //podzielic na pol?
+                #znalezienei skupiska pikseli na x i wzgledem tego podzielic?
+                elif num_width < num_height:
+                    pass
+                    #erozja, bo byc moze zlaczone cyfry
+                    #powtorne przetworzenie
+                    
+                
+                number = cv2.resize(number, (28,28))
+
+                
+                #przekazac te funkcje do rozpoznania cyferek
+                
+                #a moze tutaj jeszcze poszukac najwiekszego konturu? - liczba
+#                contours, _ = cv2.findContours(img_frame_with_number, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+#                rgb_frame = cv2.cvtColor(img_frame_with_number, cv2.COLOR_GRAY2RGB)
+#                cv2.drawContours(rgb_frame,  contours, -1, (255,0,0),1)
+                
+                
+                #change shape of image
+                flatted_number = number.reshape(-1)
+                #print(flatted_number)
+                index_numbers.append(flatted_number)
+
+                
+#                plt.figure()
+#                plt.imshow(number)
+                
+        index_numbers = np.array(index_numbers)
+#        try:
+        predicted_number = knn.predict(index_numbers)
+#        except:
+#            continue
+        print(predicted_number)      
+        
+        
+        #pomocnicze wyswietlenie
+        
+#        for number in index_numbers:
+#            
+#            number.resize(28,28)
+#            plt.figure()
+#            plt.title(w)
+#            plt.imshow(number)
+#        plt.figure()
+#        plt.imshow(imgWithoutLines)
+#        plt.figure()
+#        plt.imshow(horizontal)
+
+
+
+
 #load images
-images = read_images(10, '.\examples')
+#images = read_images(10, '.\examples')
+##read only one for test:
+images=[]
+img = skimage.io.imread('.\examples\img_3.jpg')
+images.append(img)
+
+#load model
+#knn = pickle.load(open('knnpickle_mnist', 'rb'))
+knn = joblib.load('mnist_model.pkl')
 
 #process images:
 #licznik pomocniczy
@@ -349,20 +580,27 @@ for image in images:
 #    plt.imshow(image_out)
     ############
     
-    imgLines, test = DetectWords(imgGridless, imgWarp.copy())
+    imgWords, contours_with_numbers = DetectWords(imgGridless, imgWarp.copy())
+    
+    #test = imgWarp.copy()
+    
+    DetectNumbers(imgGridless, contours_with_numbers)
+    
     
     #moze dac jeszce raz delete grid na imgout2
     
     #horizontal, vertical, imgPlain = DeleteGrid(image_out2)
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
-    imgStack = stackImages(1, ([imgWarp, imgGridless, imgLines, test]))
+    #imgStack = stackImages(1, ([imgWarp, imgGridless, imgLines, test]))
     
 #    plt.figure()
 #    plt.title("Image number "+str(licznik))
 #    plt.imshow(imgStack)
-    plt.figure()
-    plt.imshow(test)
+#    plt.figure()
+#    plt.imshow(imgGridless)
+#    plt.figure()
+#    plt.imshow(imgWords)
     
 #    plt.figure()
 #    plt.imshow(255-image_out2)
