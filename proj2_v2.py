@@ -79,7 +79,8 @@ def DetectWords(imgGridless, imgWarp):
     
     
     #imgWarp = cv2.cvtColor(imgWarp, cv2.COLOR_BGR2GRAY)
-
+    imgGrayScale = cv2.cvtColor(imgWarp, cv2.COLOR_BGR2GRAY)
+    imgGrayScale[imgGrayScale>0]=0
 
     thresh = cv2.threshold(imgGridless, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     
@@ -166,12 +167,14 @@ def DetectWords(imgGridless, imgWarp):
             
             
             #draw line
-            if licznik%2 ==0:
-                cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,0,255), 5)
+            #if licznik%2 ==0:
+            cv2.line(imgGrayScale, (xmin, y_for_xmin), (xmax, y_for_xmax), licznik, 5)
+
+            
                 #cv2.putText(imgWarp, str(licznik), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
                 
-            else:
-                cv2.line(imgWarp, (xmin, y_for_xmin), (xmax, y_for_xmax), (0,255,0), 5)
+            #else:
+                #cv2.line(imgGrayScale, (xmin, y_for_xmin), (xmax, y_for_xmax), 2, 5)
                 #cv2.putText(imgWarp, str(licznik), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
             #cv2.putText(imgWarp, str(i), (xmin, y_for_xmin), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), thickness = 4)
         
@@ -182,7 +185,7 @@ def DetectWords(imgGridless, imgWarp):
             #nastepnie dzieki ymax i ymin moge wyciac linijki (chociaz bardziej potrzebuje xmax zeby same numerki sobie wziac)
         
     
-    return imgWarp, contours_with_numbers
+    return imgGrayScale, contours_with_numbers
 
 
 
@@ -268,7 +271,8 @@ def getWarp(biggest, maxArea, img):
     imgWarpColored = img.copy()
     
     if len(biggest)!=4 or maxArea < 2055550:
-        imgWarpColored=imgWarpColored[80:imgWarpColored.shape[0] - 300, 80:imgWarpColored.shape[1] - 80]      
+        imgWarpColored=imgWarpColored[80:imgWarpColored.shape[0] - 300, 80:imgWarpColored.shape[1] - 80]    
+        pts1 = None
     else:
         biggest=reorder(biggest)
         pts1 = np.float32(biggest) # PREPARE POINTS FOR WARP
@@ -279,35 +283,43 @@ def getWarp(biggest, maxArea, img):
         #REMOVE 20 PIXELS FORM EACH SIDE
         imgWarpColored=imgWarpColored[20:imgWarpColored.shape[0] - 20, 20:imgWarpColored.shape[1] - 20]
         imgWarpColored = cv2.resize(imgWarpColored,(heightImg,widthImg))
-        plt.figure()
-        plt.imshow(imgWarpColored)
+
         
     return imgWarpColored, pts1
 
 
 def resetWarp(image, org_pts):
-    widthImg, heightImg, _ = image.shape
     
-    #add 20 pixels each side
-    #gdy bedzie grayscale mozna podmienic na dodawanie kolumn i wierszy
-    image = cv2.copyMakeBorder( image, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=(230,100,15))
-    #do all ops from getWarp inversely
-    img = cv2.resize(image, (widthImg, heightImg))
+    if len(org_pts) != 0:
+        widthImg, heightImg = image.shape
+        
+        #add 20 pixels each side
+        #gdy bedzie grayscale mozna podmienic na dodawanie kolumn i wierszy
+        image = cv2.copyMakeBorder( image, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=0)
+        #do all ops from getWarp inversely
+        img = cv2.resize(image, (widthImg, heightImg), interpolation = cv2.INTER_NEAREST)
 
     
-    #aktualne wierzcholki ()
-    pts1 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) 
-    #wierzcholki po przeksztalceniu (mozna je wziac z funkcji get Warp)
-    pts2 = org_pts
+        
+        #aktualne wierzcholki ()
+        pts1 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) 
+        #wierzcholki po przeksztalceniu (mozna je wziac z funkcji get Warp)
+        pts2 = org_pts
+        
+        matrix = cv2.getPerspectiveTransform(pts1, pts2)
+        
+        #inv_matrix = np.linalg.inv(matrix)
+        #
+        img = cv2.warpPerspective(img, matrix, (heightImg, widthImg), cv2.INTER_NEAREST, cv2.BORDER_CONSTANT)
+
+        #img = cv2.resize(image,(heightImg,widthImg))
+    else:
+        #zostala wykonana jedynie operacja usuniecia pikseli
+        img = cv2.copyMakeBorder( image, 80, 80, 80, 300, cv2.BORDER_CONSTANT, value=0)
     
-    matrix = cv2.getPerspectiveTransform(pts1, pts2)
-    
-    #inv_matrix = np.linalg.inv(matrix)
-    #
-    img = cv2.warpPerspective(img, matrix, (heightImg, widthImg))
-    #img = cv2.resize(image,(heightImg,widthImg))
-    
+    #zamiast wyswietlenia zapis do pliku
     plt.figure()
+    plt.title('returned by funct')
     plt.imshow(img)
 
 def DeleteGrid(img):
@@ -609,6 +621,8 @@ for image in images:
     ############
     
     imgWords, contours_with_numbers = DetectWords(imgGridless, imgWarp.copy())
+    plt.figure()
+    plt.imshow(imgWords)
     
     #test = imgWarp.copy()
     
@@ -620,11 +634,11 @@ for image in images:
     #horizontal, vertical, imgPlain = DeleteGrid(image_out2)
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
-    imgStack = stackImages(1, ([image, imgWarp, imgWords]))
+    #imgStack = stackImages(1, ([image, imgWarp, imgWords]))
     
-    plt.figure()
+    #plt.figure()
     #plt.title("Image number "+str(licznik))
-    plt.imshow(imgStack)
+    #plt.imshow(imgStack)
 #    plt.figure()
 #    plt.imshow(imgGridless)
 #    plt.figure()
