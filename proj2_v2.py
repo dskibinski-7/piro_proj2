@@ -279,8 +279,36 @@ def getWarp(biggest, maxArea, img):
         #REMOVE 20 PIXELS FORM EACH SIDE
         imgWarpColored=imgWarpColored[20:imgWarpColored.shape[0] - 20, 20:imgWarpColored.shape[1] - 20]
         imgWarpColored = cv2.resize(imgWarpColored,(heightImg,widthImg))
+        plt.figure()
+        plt.imshow(imgWarpColored)
         
-    return imgWarpColored
+    return imgWarpColored, pts1
+
+
+def resetWarp(image, org_pts):
+    widthImg, heightImg, _ = image.shape
+    
+    #add 20 pixels each side
+    #gdy bedzie grayscale mozna podmienic na dodawanie kolumn i wierszy
+    image = cv2.copyMakeBorder( image, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=(230,100,15))
+    #do all ops from getWarp inversely
+    img = cv2.resize(image, (widthImg, heightImg))
+
+    
+    #aktualne wierzcholki ()
+    pts1 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) 
+    #wierzcholki po przeksztalceniu (mozna je wziac z funkcji get Warp)
+    pts2 = org_pts
+    
+    matrix = cv2.getPerspectiveTransform(pts1, pts2)
+    
+    #inv_matrix = np.linalg.inv(matrix)
+    #
+    img = cv2.warpPerspective(img, matrix, (heightImg, widthImg))
+    #img = cv2.resize(image,(heightImg,widthImg))
+    
+    plt.figure()
+    plt.imshow(img)
 
 def DeleteGrid(img):
     
@@ -437,12 +465,12 @@ def DetectNumbers(img, contours_with_numbers):
                 number = cv2.bitwise_not(img_frame_with_number)
                 
                 #do wywalenia
-                if ktory_wiersz == 3:
-                    img_testowe_rgb = cv2.cvtColor(img_frame_with_numbers, cv2.COLOR_GRAY2RGB)
-                    cv2.drawContours(img_testowe_rgb,  cnt, -1, (255,0,0),1)
-                    #cv2.putText(img_testowe_rgb, str(len(cnt)), (x+w//2,y+h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), thickness = 1)              
-                    plt.figure()
-                    plt.imshow(img_testowe_rgb)
+#                if ktory_wiersz == 3:
+#                    img_testowe_rgb = cv2.cvtColor(img_frame_with_numbers, cv2.COLOR_GRAY2RGB)
+#                    cv2.drawContours(img_testowe_rgb,  cnt, -1, (255,0,0),1)
+#                    #cv2.putText(img_testowe_rgb, str(len(cnt)), (x+w//2,y+h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), thickness = 1)              
+#                    plt.figure()
+#                    plt.imshow(img_testowe_rgb)
                 
 
                 #set equal ratio before resizing
@@ -495,10 +523,10 @@ def DetectNumbers(img, contours_with_numbers):
                 
         index_numbers = np.array(index_numbers)
 #        try:
-        predicted_number = knn.predict(index_numbers)
+        #predicted_number = knn.predict(index_numbers)
 #        except:
 #            continue
-        print(predicted_number)      
+        #print(predicted_number)      
         
         
         #pomocnicze wyswietlenie
@@ -560,7 +588,7 @@ for image in images:
     #imgEro = cv2.erode(imgDial, square(5), iterations=1) 
     
     biggest, maxArea = getContours(imgDial, imgContour) 
-    imgWarp = getWarp(biggest, maxArea, image)
+    imgWarp, org_pts = getWarp(biggest, maxArea, image)
     
     #imgGray, imgThresh, horizontal, vertical, imgPlain = DeleteGrid(imgWarp)
     
@@ -592,11 +620,11 @@ for image in images:
     #horizontal, vertical, imgPlain = DeleteGrid(image_out2)
  
     #imgStack = stackImages(1, ([image, imgHSV, result, imgBlur, imgGray, imgThresh, imgDial, imgContour, imgWarp]))
-    #imgStack = stackImages(1, ([imgWarp, imgGridless, imgLines, test]))
+    imgStack = stackImages(1, ([image, imgWarp, imgWords]))
     
-#    plt.figure()
-#    plt.title("Image number "+str(licznik))
-#    plt.imshow(imgStack)
+    plt.figure()
+    #plt.title("Image number "+str(licznik))
+    plt.imshow(imgStack)
 #    plt.figure()
 #    plt.imshow(imgGridless)
 #    plt.figure()
@@ -604,6 +632,9 @@ for image in images:
     
 #    plt.figure()
 #    plt.imshow(255-image_out2)
+    
+    resetWarp(imgWords, org_pts)
+    
     licznik+=1
 
 
