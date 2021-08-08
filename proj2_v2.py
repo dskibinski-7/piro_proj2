@@ -288,7 +288,7 @@ def getWarp(biggest, maxArea, img):
     return imgWarpColored, pts1
 
 
-def resetWarp(image, org_pts):
+def resetWarp(image, org_pts, img_number):
     
     if len(org_pts) != 0:
         widthImg, heightImg = image.shape
@@ -318,9 +318,12 @@ def resetWarp(image, org_pts):
         img = cv2.copyMakeBorder( image, 80, 80, 80, 300, cv2.BORDER_CONSTANT, value=0)
     
     #zamiast wyswietlenia zapis do pliku
-    plt.figure()
-    plt.title('returned by funct')
-    plt.imshow(img)
+    file_name = str(img_number) + '-wyrazy.png'
+    cv2.imwrite(file_name, img)
+    
+#    plt.figure()
+#    plt.title('returned by funct')
+#    plt.imshow(img)
 
 def DeleteGrid(img):
     
@@ -407,7 +410,12 @@ def getContours(img, imgContour):
 
 
 
-def DetectNumbers(img, contours_with_numbers):
+def DetectNumbers(img, contours_with_numbers, img_number):
+    
+    file_name = str(img_number)+'-indeksy.txt'
+    #clear file
+    open(file_name, 'w').close()
+    file = open(file_name, 'a')
     
     #cv2.drawContours(img, contours_with_numbers, -1, (255,0,0),5)
     #do wywalenia
@@ -535,11 +543,18 @@ def DetectNumbers(img, contours_with_numbers):
                 
         index_numbers = np.array(index_numbers)
 #        try:
-        #predicted_number = knn.predict(index_numbers)
+        predicted_number = knn.predict(index_numbers)
 #        except:
 #            continue
-        #print(predicted_number)      
+        #print(predicted_number) 
+        predicted_number = str(predicted_number)
+        predicted_number = predicted_number.replace(' ', '')
+        predicted_number = predicted_number.replace('[', '')
+        predicted_number = predicted_number.replace(']', '')
+        predicted_number = predicted_number + '\n'
+        file.write(predicted_number)
         
+    file.close()
         
         #pomocnicze wyswietlenie
         
@@ -564,13 +579,15 @@ images=[]
 img = skimage.io.imread('.\examples\img_3.jpg')
 images.append(img)
 
+
+
 #load model
 #knn = pickle.load(open('knnpickle_mnist', 'rb'))
 knn = joblib.load('mnist_model.pkl')
 
 #process images:
 #licznik pomocniczy
-licznik=0
+licznik=1
 for image in images:
 
     imgContour = image.copy()
@@ -621,12 +638,12 @@ for image in images:
     ############
     
     imgWords, contours_with_numbers = DetectWords(imgGridless, imgWarp.copy())
-    plt.figure()
-    plt.imshow(imgWords)
+#    plt.figure()
+#    plt.imshow(imgWords)
     
     #test = imgWarp.copy()
     
-    DetectNumbers(imgGridless, contours_with_numbers)
+    DetectNumbers(imgGridless, contours_with_numbers, licznik)
     
     
     #moze dac jeszce raz delete grid na imgout2
@@ -647,7 +664,7 @@ for image in images:
 #    plt.figure()
 #    plt.imshow(255-image_out2)
     
-    resetWarp(imgWords, org_pts)
+    resetWarp(imgWords, org_pts, licznik)
     
     licznik+=1
 
