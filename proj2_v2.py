@@ -11,6 +11,7 @@ import numpy as np
 import pickle
 from sklearn.externals import joblib
 import collections
+import sys
 
 
 
@@ -195,7 +196,7 @@ def DetectWords(imgGridless, imgWarp):
 #w zadaniu będzie rozszerzenie png i liczby o 0...N-1
 def read_images(num_of_images, path):
     images = []
-    for im in range(1,num_of_images):
+    for im in range(1,num_of_images+1):
         filename = os.path.join(path, 'img_' + str(im)+'.jpg')
         img = skimage.io.imread(filename)
         images.append(img)
@@ -272,7 +273,7 @@ def getWarp(biggest, maxArea, img):
     
     if len(biggest)!=4 or maxArea < 2055550:
         imgWarpColored=imgWarpColored[80:imgWarpColored.shape[0] - 300, 80:imgWarpColored.shape[1] - 80]    
-        pts1 = None
+        pts1 = []
     else:
         biggest=reorder(biggest)
         pts1 = np.float32(biggest) # PREPARE POINTS FOR WARP
@@ -288,7 +289,7 @@ def getWarp(biggest, maxArea, img):
     return imgWarpColored, pts1
 
 
-def resetWarp(image, org_pts, img_number):
+def resetWarp(image, org_pts, img_number, path):
     
     if len(org_pts) != 0:
         widthImg, heightImg = image.shape
@@ -318,7 +319,7 @@ def resetWarp(image, org_pts, img_number):
         img = cv2.copyMakeBorder( image, 80, 80, 80, 300, cv2.BORDER_CONSTANT, value=0)
     
     #zamiast wyswietlenia zapis do pliku
-    file_name = str(img_number) + '-wyrazy.png'
+    file_name = os.path.join(path, str(img_number) + '-wyrazy.png')
     cv2.imwrite(file_name, img)
     
 #    plt.figure()
@@ -410,9 +411,10 @@ def getContours(img, imgContour):
 
 
 
-def DetectNumbers(img, contours_with_numbers, img_number):
+def DetectNumbers(img, contours_with_numbers, img_number, path):
     
-    file_name = str(img_number)+'-indeksy.txt'
+    file_name = os.path.join(path, str(img_number)+'-indeksy.txt')
+
     #clear file
     open(file_name, 'w').close()
     file = open(file_name, 'a')
@@ -542,10 +544,10 @@ def DetectNumbers(img, contours_with_numbers, img_number):
 #                plt.imshow(number)
                 
         index_numbers = np.array(index_numbers)
-#        try:
-        predicted_number = knn.predict(index_numbers)
-#        except:
-#            continue
+        try:
+            predicted_number = knn.predict(index_numbers)
+        except:
+            continue
         #print(predicted_number) 
         predicted_number = str(predicted_number)
         predicted_number = predicted_number.replace(' ', '')
@@ -575,10 +577,23 @@ def DetectNumbers(img, contours_with_numbers, img_number):
 #load images
 #images = read_images(10, '.\examples')
 ##read only one for test:
-images=[]
-img = skimage.io.imread('.\examples\img_3.jpg')
-images.append(img)
+#images=[]
+#img = skimage.io.imread('.\examples\img_4.jpg')
+#images.append(img)
+        
+    
 
+try:
+    input_path = str(sys.argv[1])
+    amount_of_images = int(sys.argv[2])
+    output_path = str(sys.argv[3])
+#    input_path = '.\examples'
+#    amount_of_images = 29
+#    output_path = '.\scores'
+    images = read_images(amount_of_images, input_path) 
+except:
+    #print()
+    sys.exit('Invalid input')
 
 
 #load model
@@ -643,7 +658,7 @@ for image in images:
     
     #test = imgWarp.copy()
     
-    DetectNumbers(imgGridless, contours_with_numbers, licznik)
+    DetectNumbers(imgGridless, contours_with_numbers, licznik, output_path)
     
     
     #moze dac jeszce raz delete grid na imgout2
@@ -664,7 +679,7 @@ for image in images:
 #    plt.figure()
 #    plt.imshow(255-image_out2)
     
-    resetWarp(imgWords, org_pts, licznik)
+    resetWarp(imgWords, org_pts, licznik, output_path)
     
     licznik+=1
 
